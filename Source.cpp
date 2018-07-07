@@ -6,7 +6,7 @@ using namespace std;
 
 
 
-#define FieldSize 5
+#define FieldSize 10
 
 #define Frame 'H'
 #define Block 'O'
@@ -27,11 +27,146 @@ std::string Repeat(std::string val, short num) {
 
 
 
+class Rectangle {
+public:
+	int8_t x0, y0;
+	int8_t x1, y1;
+	
+	Rectangle(int8_t nx0, int8_t ny0, int8_t nx1, int8_t ny1){
+		x0 = nx0;
+		y0 = ny0;
+		x1 = nx1;
+		y1 = ny1;
+	}
+	Rectangle() {}
+	void operator=(Rectangle other) {
+		x0 = other.x0;
+		y0 = other.y0;
+		x1 = other.x1;
+		y1 = other.y1;
+	}
+	void config(int8_t nx0, int8_t ny0, int8_t nx1, int8_t ny1) {
+		x0 = nx0;
+		y0 = ny0;
+		x1 = nx1;
+		y1 = ny1;
+	}
+	short surface() {
+		return (x1 - x0) * (y1 - y0);
+	}
+	std::string str() {
+		string out;
+
+		out += '(';
+		out += to_string(x0);
+		out += ", ";
+		out += to_string(y0);
+		out += ')';
+
+		out += " x ";
+
+		out += '(';
+		out += to_string(x1);
+		out += ", ";
+		out += to_string(y1);
+		out += ')';
+
+		return out;
+	}
+};
+
+template <typename datatype>
+class List {
+private:
+	struct Element {
+		void* payload;
+		Element* pointer;
+	};
+
+	Element* start = new Element;
+	Element* appendix;
+
+public:
+	short length = 0;
+
+	List(){
+		(*start).pointer = start;
+	}
+	List<datatype> copy() {
+		List<datatype> out;
+		
+		Element* last = start;
+		Element* other = out.start;
+		Element* appendix;
+		(*out.start).payload = (*start).payload;
+		(*out.start).pointer = out.start;
+		while ((*last).pointer != last) {
+			last = (*last).pointer;
+
+			appendix = new Element;
+			(*appendix).payload = &(*static_cast<datatype*>((*last).payload));
+			(*appendix).pointer = appendix;
+			(*other).pointer = appendix;
+			other = appendix;
+		}
+
+		out.length = length;
+
+		return out;
+	}
+	void add(datatype dlt) {
+		datatype* pnt = new datatype;
+		(*pnt) = dlt;
+
+		if (length == 0) {
+			(*start).payload = pnt;
+		}
+		else {
+			appendix = new Element;
+			(*appendix).pointer = start;
+			(*appendix).payload = pnt;
+			start = appendix;
+		}
+
+		length += 1;
+	}
+	void del(short ind) {
+		if (ind == 0) {
+			start = (*start).pointer;
+		}
+		else {
+			Element* last = start;
+
+			for (short q = 0; q < ind - 1; q++) {
+				last = (*last).pointer;
+			}
+
+			length -= 1;
+			(*last).pointer = (*(*last).pointer).pointer;
+		}
+	}
+	datatype pop() {
+		datatype out = *static_cast<datatype*>((*start).payload);
+		start = (*start).pointer;
+		length -= 1;
+		return out;
+	}
+	datatype* get(short ind) {
+		Element* last = start;
+
+		for (short q = 0; q < ind; q++) {
+			last = (*last).pointer;
+		}
+
+		return static_cast<datatype*>((*last).payload);
+	}
+};
+
 template<int8_t fieldsize>
 class Field {
 private:
-	int8_t tiles[3 * fieldsize * fieldsize / 8 + 1]; // the sqyear itself
-	int8_t left[((fieldsize + 1) * fieldsize / 2) / 8 + 1]; // this var is made to program couldnt use one type of rectangle twise.
+	unsigned char tiles[3 * fieldsize * fieldsize / 8 + 1]; // the squear itself
+	unsigned char left[((fieldsize + 1) * fieldsize / 2) / 8 + 1]; // this var is made to program couldnt use one type of rectangle twise.
 	short sum, empty; // this 2 vars are used for picking optimisation: if empty > sum, squear is unsolvable.
 
 	void write(int8_t xcor, int8_t ycor, int8_t direction, bool val) {
@@ -65,6 +200,25 @@ public:
 				sum += xs * ys;
 			}
 		}
+		sum -= fieldsize * fieldsize;
+	}
+	Field<fieldsize> copy() {
+		Field<fieldsize> out;
+
+		out.size = fieldsize;
+		out.maximal = maximal;
+		out.minimal = minimal;
+		out.sum = sum;
+		out.empty = empty;
+
+		for (int8_t q = 0; q < 3 * fieldsize * fieldsize / 8 + 1; q++) {
+			out.tiles[q] = tiles[q];
+		}
+		for (int8_t q = 0; q < ((fieldsize + 1) * fieldsize / 2) / 8 + 1; q++) {
+			out.left[q] = left[q];
+		}
+
+		return out;
 	}
 	void operator=(Field other) {
 		maximal = other.maximal;
@@ -119,6 +273,67 @@ public:
 		short ind = ((ys - 1) * ys / 2 + (xs - 1));
 		left[ind / 8] = (left[ind / 8] & (255 - int8_t(pow(2, ind % 8))));
 	}
+	void pass(int8_t xs, int8_t ys) {
+		sum -= xs * ys;
+	}
+	void build(List<Rectangle> lst) {
+		for (short q = 0; q < lst.length; q++) {
+			rect(
+				(*lst.get(q)).x0,
+				(*lst.get(q)).y0,
+				(*lst.get(q)).x1,
+				(*lst.get(q)).y1
+			);
+		}
+	}
+	void clear() {
+		maximal = 0;
+		minimal = INT16_MAX;
+
+		for (int8_t q = 0; q < 3 * fieldsize * fieldsize / 8 + 1; q++) {
+			tiles[q] = 0;
+		}
+		for (int8_t q = 0; q < ((fieldsize + 1) * fieldsize / 2) / 8 + 1; q++) {
+			left[q] = 255;
+		}
+
+		empty = size * size;
+		sum = 0;
+		for (int8_t ys = 1; ys <= size; ys++) {
+			for (int8_t xs = 1; xs <= ys; xs++) {
+				sum += xs * ys;
+			}
+		}
+		sum -= fieldsize * fieldsize;
+	}
+	bool check(List<Rectangle> rlist) {
+		Field<fieldsize> other = copy();
+		List<Rectangle> lst = rlist.copy();
+		Rectangle rct;
+
+		while (!other.filled()) {
+			rct = lst.pop();
+			if (!other.possible(
+				rct.x0,
+				rct.y0,
+				rct.x1,
+				rct.y1
+			)) {
+				return 0;
+			}
+			else {
+				other.rect(
+					rct.x0,
+					rct.y0,
+					rct.x1,
+					rct.y1
+				);
+			}
+		}
+
+		return 1;
+		
+	}
 	bool possible(int8_t x0, int8_t y0, int8_t x1, int8_t y1) {
 		short ind;
 
@@ -161,6 +376,9 @@ public:
 		}
 
 		return 1;
+	}
+	short score() {
+		return maximal - minimal;
 	}
 	std::string str() {
 		string out = "";
@@ -273,7 +491,10 @@ void Pickpart(Field<fieldsize> source, Field<fieldsize>* out, short* best, int8_
 				}
 			}
 		}
-		Pickpart(source, out, best, xs, ys);
+
+		other = source;
+		other.pass(xs, ys);
+		Pickpart(other, out, best, xs, ys);
 	}
 }
 template<int8_t fieldsize>
@@ -287,10 +508,217 @@ Field<fieldsize> Pick() {
 	return out;
 }
 
+template<int8_t fieldsize>
+List<Rectangle> BDPrimary() {
+	Field<fieldsize> out;
+
+
+
+	bool direction = 1;
+	int8_t width;
+
+	int8_t xcor, ycor;
+	xcor = 0;
+	ycor = 0;
+
+	Rectangle rectangle(0, 0, 0, 0);
+	List<Rectangle> rlist;
+
+	short sum = 0;
+	int8_t num = 0;
+	while (!out.filled()) {
+		if ((fieldsize - xcor == 2) | (fieldsize - ycor == 2)) {
+			if (out.possible(xcor, ycor, fieldsize, fieldsize)) {
+				out.rect(xcor, ycor, fieldsize, fieldsize);
+			}
+			else {
+				(*rlist.get(0)).config(
+					(*rlist.get(0)).x0,
+					(*rlist.get(0)).y0,
+					fieldsize,
+					fieldsize
+				);
+				out.clear();
+				out.build(rlist);
+			}
+		}
+		else {
+			if (direction) {
+				if (num == 0) {
+					width = 1;
+				}
+				else {
+					width = round(float(sum) / float(num)) / (fieldsize - ycor);
+				}
+				while (!out.possible(xcor, ycor, xcor + width, fieldsize)) {
+					width += 1;
+				}
+
+				rectangle.config(xcor, ycor, xcor + width, fieldsize);
+				rlist.add(rectangle);
+
+				out.rect(xcor, ycor, xcor + width, fieldsize);
+				xcor += width;
+				sum += width * (fieldsize - ycor);
+				num += 1;
+			}
+			else {
+				if (num == 0) {
+					width = 1;
+				}
+				else {
+					width = (sum / num) / (fieldsize - xcor);
+				}
+				while (!out.possible(xcor, ycor, fieldsize, ycor + width)) {
+					width += 1;
+				}
+
+				rectangle.config(xcor, ycor, fieldsize, ycor + width);
+				rlist.add(rectangle);
+
+				out.rect(xcor, ycor, fieldsize, ycor + width);
+				ycor += width;
+				sum += width * (fieldsize - xcor);
+				num += 1;
+			}
+		}
+
+		direction = !direction;
+	}
+
+	return rlist;
+}
+template<int8_t fieldsize>
+List<Rectangle> BDCut(List<Rectangle> rlist) {
+	List<Rectangle> other, result;
+	Field<fieldsize> source, empty;
+	Rectangle rect, nrect;
+	source.build(rlist);
+	result = rlist.copy();
+	other = rlist.copy();
+
+	short msurface = 0;
+	int8_t ind;
+	for (int8_t q = 0; q < rlist.length; q++) {
+		rect = other.pop();
+		if (rect.surface() > msurface) {
+			msurface = rect.surface();
+			ind = q;
+		}
+	}
+	rect = *rlist.get(ind);
+	short xs = rect.x1 - rect.x0;
+	short ys = rect.y1 - rect.y0;
+	
+	short best = source.maximal - source.minimal;
+	for (int8_t ycor = rect.y0 + 1; ycor < rect.y1; ycor++) {
+		other = rlist.copy();
+		other.del(ind);
+
+		nrect.config(
+			rect.x0,
+			rect.y0,
+			rect.x1,
+			ycor
+		);
+		other.add(nrect);
+		nrect.config(
+			rect.x0,
+			ycor,
+			rect.x1,
+			rect.y1
+		);
+		other.add(nrect);
+
+		if (empty.check(other)) {
+			empty.build(other);
+			if (empty.maximal - empty.minimal <= best) {
+				best = empty.maximal - empty.minimal;
+				result = other.copy();
+			}
+			empty.clear();
+		}
+	}
+	for (int8_t xcor = rect.x0 + 1; xcor < rect.x1; xcor++) { // the same, but by the X axis
+		other = rlist.copy();
+		other.del(ind);
+
+		nrect.config(
+			rect.x0,
+			rect.y0,
+			xcor,
+			rect.y1
+		);
+		other.add(nrect);
+		nrect.config(
+			xcor,
+			rect.y0,
+			rect.x1,
+			rect.y1
+		);
+		other.add(nrect);
+
+		if (empty.check(other)) {
+			empty.build(other);
+			if (empty.maximal - empty.minimal <= best) {
+				best = empty.maximal - empty.minimal;
+				result = other.copy();
+			}
+			empty.clear();
+		}
+	}
+
+	return result;
+}
+template<int8_t fieldsize>
+List<Rectangle> BDAdvanced(List<Rectangle> rlist) {
+	Field<fieldsize> field, other, old;
+	List<Rectangle> out, res;
+	field.build(rlist);
+	out = rlist;
+
+	short best;
+	while (1) {
+		best = field.score();
+
+		res = BDCut<fieldsize>(out);
+		other.clear();
+		other.build(res);
+		if (other.score() <= best) {
+			best = other.score();
+			out = res;
+		}
+
+		if ((other.maximal == old.maximal) and (other.minimal == old.minimal)) {
+			break;
+		}
+		else {
+			old = other;
+		}
+	}
+
+	return out;
+}
+
+template<int8_t fieldsize>
+Field<fieldsize> BorderDecrease() {
+	Field<fieldsize> out;
+	List<Rectangle> rlist;
+
+	rlist = BDPrimary<fieldsize>();
+
+	rlist = BDAdvanced<fieldsize>(rlist);
+
+	out.build(rlist);
+	return out;
+}
+
 
 
 int main() {
-	Field<FieldSize> field = Pick<FieldSize>();
+	Field<FieldSize> field;
+	//field = Pick<FieldSize>();s
+	field = BorderDecrease<FieldSize>();
 
 	cout << field.str() << endl;
 
